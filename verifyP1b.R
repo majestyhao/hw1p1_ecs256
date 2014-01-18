@@ -1,8 +1,12 @@
+q <- matrix(c(0.25, -1/20, 0, 0, 1/8, -(1/25 + 1/25), 1, 1, 1), nrow = 3, ncol = 3, byrow = TRUE)
+#cat(q)
+
 verifyP1b <- function (q) {
   # count the row number of q and put it into n
   n <- nrow(q)
   # transpose q and assign it to newq
-  newq <- t(q)
+  #newq <- t(q)
+  newq <- q
   # replicate 1 for n times and put it in to the nth row of newq
   newq[n, ] <- rep(1, n)
   # replicate 0 for n - 1 times and combine 1 to construct rhs
@@ -10,3 +14,5 @@ verifyP1b <- function (q) {
   pivec <- solve(newq, rhs)
   return(pivec)
 }
+
+cat(verifyP1b(q))
