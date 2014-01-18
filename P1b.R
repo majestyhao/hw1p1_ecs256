@@ -184,6 +184,13 @@ mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
 }
 
 # what new events are triggered by the occurrence of an old one?
+# M/M/S/∞ 表示输入过程是Poisson流, 服务时间服从负
+# 指数分布,  系统有S个服务台平行服务, 系统容量为无穷的
+# 等待制排队系统.
+# 即顾客到达系统的相继到达时间间隔独立，且服从参数
+# 为λ的负指数分布(即输入过程为Poisson过程), 服务台
+# 的服务时间也独立同分布,  且服从参数为μ的负指数分
+# 布，而且系统空间无限，允许永远排队.
 mm1react <- function(evnt,simlist) {
   etype <- evnt[2]
   if (etype == 1) {  # job arrival
