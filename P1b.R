@@ -51,9 +51,10 @@
 #    mainloop(mysim,mysimtimelim)
 #    print results
 
-# create a simlist, which will be the return value, an R environment
+# create a simlist (simulation list), which will be the return value, an R environment
+# library functions (do not alter)
 newsim <- function(dbg=F) {
-  simlist <- new.env()  # new environment: like a pointer
+  simlist <- new.env()  # new environment 宏观控制: like a pointer
   simlist$currtime <- 0.0  # current simulated time
   simlist$evnts <- NULL  # event set
   simlist$dbg <- dbg  # printing flag
@@ -61,6 +62,7 @@ newsim <- function(dbg=F) {
 }
 
 # insert event evnt into evnts in simlist
+# library functions (do not alter)
 insevnt <- function(evnt,simlist) {
   # if the event set is empty, set it to consist of evnt and return
   if (is.null(simlist$evnts)) {
@@ -110,6 +112,7 @@ mainloop <- function(simlist,simtimelim) {
       print(head)
       print("events list now")
       print(simlist$evnts)
+      # enter R browser for single-stepping
       browser()
     }
   }
@@ -156,33 +159,6 @@ delfcfsqueuehead <- function(queue) {
   list(qhead=qhead,newqueue=newqueue)
 }
 
-# test; M/M/1 queue--exponential ("Markov" job interarrivals,
-# exponential service times, 1 server
-mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
-  simlist <- newsim(dbg)
-  simlist$reactevent <- mm1react  # defined below
-  simlist$arrvrate <- 1 / meaninterarrv
-  simlist$srvrate <- 1 / meansrv
-  simlist$totjobs <- 0
-  simlist$totwait <- 0.0
-  simlist$queue <- NULL
-  simlist$srvrbusy <- F
-  # defining job numbers is good practice, always invaluable during
-  # debugging
-  simlist$jobnum <- 0
-  # event type codes: 1 for arrival, 2 for service completion;
-  # set up first event, including info on this job's arrival time for
-  # later use in finding mean wait until job done
-  timeto1starrival <- rexp(1,simlist$arrvrate)
-  jobnum <- simlist$jobnum + 1
-  simlist$jobnum <- jobnum
-  schedevnt(timeto1starrival,1,simlist,c(timeto1starrival,jobnum))
-  mainloop(simlist,timelim)
-  # should print out 1 / (srvrate - arrvrate)
-  cat("mean wait:  ")
-  print(simlist$totwait / simlist$totjobs)
-}
-
 # what new events are triggered by the occurrence of an old one?
 # M/M/S/∞ 表示输入过程是Poisson流, 服务时间服从负
 # 指数分布,  系统有S个服务台平行服务, 系统容量为无穷的
@@ -191,6 +167,7 @@ mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
 # 为λ的负指数分布(即输入过程为Poisson过程), 服务台
 # 的服务时间也独立同分布,  且服从参数为μ的负指数分
 # 布，而且系统空间无限，允许永远排队.
+# input the old event 
 mm1react <- function(evnt,simlist) {
   etype <- evnt[2]
   if (etype == 1) {  # job arrival
@@ -224,4 +201,37 @@ mm1react <- function(evnt,simlist) {
     }
   } 
 }
+
+# test; M/M/1 queue--exponential ("Markov" job interarrivals,
+# exponential service times, 1 server
+# main function
+# set the parameters of mm1 react
+# input event inter arrive mean time, repairer serves mean time, 
+# running time limit for main loop
+mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
+  simlist <- newsim(dbg) # new simlist
+  simlist$reactevent <- mm1react  # set reactevent in simlist
+  # et application-specific variables in simlist
+  simlist$arrvrate <- 1 / meaninterarrv # set arrive rate lamda, which is the reciprocol of the mean time
+  simlist$srvrate <- 1 / meansrv # set serve rate u
+  simlist$totjobs <- 0 # total jobs number
+  simlist$totwait <- 0.0 # total waits number
+  simlist$queue <- NULL
+  simlist$srvrbusy <- F
+  # defining job numbers is good practice, always invaluable during
+  # debugging
+  simlist$jobnum <- 0
+  # event type codes: 1 for arrival, 2 for service completion;
+  # set up first event, including info on this job's arrival time for
+  # later use in finding mean wait until job done
+  timeto1starrival <- rexp(1,simlist$arrvrate) # generate random variable with exponential distribution cdf 
+  jobnum <- simlist$jobnum + 1
+  simlist$jobnum <- jobnum
+  schedevnt(timeto1starrival,1,simlist,c(timeto1starrival,jobnum))
+  mainloop(simlist,timelim)
+  # should print out 1 / (srvrate - arrvrate)
+  cat("mean wait:  ")
+  print(simlist$totwait / simlist$totjobs)
+}
+
 
