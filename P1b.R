@@ -194,8 +194,8 @@ mm1react <- function(evnt,simlist) {
     srvduration <- rexp(1, simlist$state * simlist$srvrate)
     if (simlist$state == simlist$k) {
       # print("yell")
-       tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
-       job <- tmp$qhead
+      tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+      job <- tmp$qhead
       # simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + srvduration
       # simlist$lastTime <- simlist$currtime + srvduration
       # schedevnt(simlist$currtime+srvduration, 2, simlist, job[3:4])
@@ -213,8 +213,8 @@ mm1react <- function(evnt,simlist) {
         timeofnextarrival <- simlist$currtime + timeofnextarrival
         schedevnt(timeofnextarrival, 1, simlist, c(timeofnextarrival,jobnum))
       } else {
-         tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
-         job <- tmp$qhead
+        tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+        job <- tmp$qhead
         #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + srvduration
         # simlist$lastTime <- simlist$currtime + srvduration
         # schedule a service/repairmen
@@ -314,10 +314,13 @@ machineRepair1b <- function(k, u, r, timelim,dbg=F) {
   # what is the relationship between pi: propotion of time at that state
   #cat("State Duration: ")
   #print(simlist$stateDuration)
-    # cat("current time: ")
-    # print(simlist$currtime)
-    simlist$pi = simlist$stateDuration/simlist$lastTime
-    print(simlist$pi)
+  # cat("current time: ")
+  # print(simlist$currtime)
+  simlist$pi = simlist$stateDuration/simlist$lastTime
+  cat("Pi: ")
+  print(simlist$pi)
+  cat("w: ")
+  print(sum((0:k) * simlist$pi))
 }
 
 machineRepair1b(10,25,8,100000)

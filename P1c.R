@@ -68,7 +68,8 @@ insevnt <- function(evnt,simlist) {
     return()
   }
   # otherwise, find insertion point
-  inspt <- binsearch(simlist$evnts[,1],evnt[1])
+  # inspt <- binsearch(simlist$evnts[,1],evnt[1])
+  inspt <- binsearchC(simlist$evnts[, 1], evnt[1])
   # now "insert," by reconstructing the matrix; we find what portion of
   # the current matrix should come before evnt and what portion should 
   # come after it, then string everything together
@@ -219,6 +220,7 @@ mm1react <- function(evnt,simlist) {
 }
 
 machinerepair <- function(k,u,r,timelim,dbg=F) {
+  Rcpp::sourceCpp('test.cpp')
   simlist <- newsim(dbg)
   simlist$reactevent <- mrreact  # defined below
   simlist$arrvrate <- 1 / r
@@ -269,9 +271,6 @@ mrreact <- function(evnt,simlist) {
       tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
       job <- tmp$qhead
       srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
-      print(job[3:4])
-      print(evnt[3:4])
-      print("\n")
       schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])
     } 
     else # can be arrival, can be served
