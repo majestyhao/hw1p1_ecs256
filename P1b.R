@@ -65,11 +65,16 @@ newsim <- function(dbg=F) {
 # library functions (do not alter)
 insevnt <- function(evnt,simlist) {
   # if the event set is empty, set it to consist of evnt and return
+  # cat("new arrival/completion evnt:")
+  # print(evnt)
+  # print("\n")
   if (is.null(simlist$evnts)) {
     simlist$evnts <- matrix(evnt,nrow=1)
     return()
   }
-  # otherwise, find insertion point
+  # otherwise, find insertion point as inspt based on timeline
+  # compare the occurance time
+  # evnts only keep the boundary between arrival and completion event
   inspt <- binsearch(simlist$evnts[,1],evnt[1])
   # now "insert," by reconstructing the matrix; we find what portion of
   # the current matrix should come before evnt and what portion should 
@@ -79,18 +84,25 @@ insevnt <- function(evnt,simlist) {
   after <- if (inspt <= nr) simlist$evnts[inspt:nr,] else NULL  
   simlist$evnts <- rbind(before,evnt,after)  
   rownames(simlist$evnts) <- NULL
+  # cat("event list:")
+  # print(simlist$evnts[,1])
+  # print(inspt)
+  # cat("before:")
+  # print(before)
+  # cat("after:")
+  # print(after)
 }
 
 # schedule new event in evnts in simlist; evnttime is the time at
 # which the event is to occur; evnttype is the event type; appdata is
-# a vector of numerical application-specific data
+# a vector of numerical application-specific data (do not alter)
 schedevnt <- function(evnttime,evnttype,simlist,appdata=NULL) {
   evnt <- c(evnttime,evnttype,appdata)
   insevnt(evnt,simlist)  
 }
 
 # start to process next event (second half done by application
-# programmer via call to reactevnt() from mainloop())
+# programmer via call to reactevnt() from mainloop()) (do not alter)
 getnextevnt <- function(simlist) {
   head <- simlist$evnts[1,]
   # delete head
@@ -99,20 +111,22 @@ getnextevnt <- function(simlist) {
   return(head)
 }
 
-# main loop of the simulation
+# main loop of the simulation (do not alter)
 mainloop <- function(simlist,simtimelim) {
   while(simlist$currtime < simtimelim) {
-    head <- getnextevnt(simlist)  
+    head <- getnextevnt(simlist) # extract head event
     # update current simulated time
     simlist$currtime <- head[1]  
     # process this event (programmer-supplied ftn)
     simlist$reactevent(head,simlist)  
     if (simlist$dbg) {
-      print("event occurred:")
+      print("event occurred: current time; type: arrival or service completion; data: timeofnextarrival & job num;")
       print(head)
-      print("events list now")
+      print("events list now: before, after")
       print(simlist$evnts)
       # enter R browser for single-stepping
+      print("queue: ")
+      print(simlist$queue)
       browser()
     }
   }
@@ -168,36 +182,88 @@ delfcfsqueuehead <- function(queue) {
 # 的服务时间也独立同分布,  且服从参数为μ的负指数分
 # 布，而且系统空间无限，允许永远排队.
 # input the old event 
-mm1react <- function(evnt,simlist) {
+mm1react <- function(evnt,simlist) {  
+  # print(simlist$lastTime + simlist$currtime)
+  simlist$stateDuration[simlist$state + 1] <- simlist$stateDuration[simlist$state + 1] - simlist$lastTime + simlist$currtime
+  simlist$lastTime = simlist$currtime
   etype <- evnt[2]
   if (etype == 1) {  # job arrival
-    # schedule next arrival
-    timeofnextarrival <- simlist$currtime + rexp(1,simlist$arrvrate)
-    jobnum <- simlist$jobnum + 1
-    simlist$jobnum <- jobnum
-    schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))
-    # start newly-arrived job or queue it
-    if (!simlist$srvrbusy) {  # start job service
-      simlist$srvrbusy <- T
-      srvduration <- rexp(1,simlist$srvrate)
-      schedevnt(simlist$currtime+srvduration,2,simlist,evnt[3:4])
-    } else {  # add to queue
-      simlist$queue <- appendtofcfsqueue(simlist$queue,evnt)
+    simlist$state = simlist$state + 1 # state indicator++
+    # using the queue to buffer the broken machine/event
+    simlist$queue <- appendtofcfsqueue(simlist$queue,evnt) # add to queue  
+    srvduration <- rexp(1, simlist$state * simlist$srvrate)
+    if (simlist$state == simlist$k) {
+      # print("yell")
+       tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+       job <- tmp$qhead
+      # simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + srvduration
+      # simlist$lastTime <- simlist$currtime + srvduration
+      # schedevnt(simlist$currtime+srvduration, 2, simlist, job[3:4])
+      schedevnt(simlist$currtime + srvduration, 2, simlist, evnt[3:4])
+    } else {
+      # compare  timeofnextarrival and srvduration  
+      timeofnextarrival <- rexp(1, (simlist$k - simlist$state) * simlist$arrvrate)      
+      if (timeofnextarrival < srvduration) {
+        jobnum <- simlist$jobnum + 1
+        simlist$jobnum <- jobnum
+        #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + timeofnextarrival 
+        # simlist$lastTime <- simlist$currtime + timeofnextarrival
+        # schedule next arrival
+        # schedevnt(simlist$lastTime, 1, simlist, c(timeofnextarrival,jobnum))
+        timeofnextarrival <- simlist$currtime + timeofnextarrival
+        schedevnt(timeofnextarrival, 1, simlist, c(timeofnextarrival,jobnum))
+      } else {
+         tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+         job <- tmp$qhead
+        #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + srvduration
+        # simlist$lastTime <- simlist$currtime + srvduration
+        # schedule a service/repairmen
+        # schedevnt(simlist$lastTime, 2, simlist, job[3:4])
+        # schedevnt(simlist$currtime + srvduration, 2, simlist, job[3:4])
+        schedevnt(simlist$currtime + srvduration, 2, simlist, evnt[3:4])
+      }
     }
   } else if (etype == 2) {  # job completion
-    # bookkeeping
+    # bookkeeping   
+    # extract and del the head
+    simlist$state <- simlist$state - 1    
+    tmp <- delfcfsqueuehead(simlist$queue)
+    job <- tmp$qhead
+    simlist$queue <- tmp$newqueue
+    
     simlist$totjobs <- simlist$totjobs + 1
-    simlist$totwait <- simlist$totwait + simlist$currtime - evnt[3]
-    simlist$srvrbusy <- F
+    simlist$totwait <- simlist$totwait + simlist$currtime - evnt[3]    
+    timeofnextarrival <- rexp(1, (simlist$k - simlist$state) * simlist$arrvrate)
     # check queue for waiting jobs
-    if (!is.null(simlist$queue)) {
-      tmp <- delfcfsqueuehead(simlist$queue)
-      job <- tmp$qhead
-      simlist$queue <- tmp$newqueue
-      # start job service
-      simlist$srvrbusy <- T
-      srvduration <- rexp(1,simlist$srvrate)
-      schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])
+    #if (!is.null(simlist$queue)) {
+    if (simlist$state != 0) {
+      # compare  timeofnextarrival and srvduration     
+      srvduration <- rexp(1, simlist$state * simlist$srvrate)
+      if (timeofnextarrival < srvduration) {
+        jobnum <- simlist$jobnum + 1
+        simlist$jobnum <- jobnum
+        #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + timeofnextarrival
+        # simlist$lastTime <- simlist$currtime + timeofnextarrival
+        timeofnextarrival <- simlist$currtime + timeofnextarrival
+        schedevnt(timeofnextarrival, 1, simlist, c(timeofnextarrival,jobnum))
+      } else {  
+        tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+        job <- tmp$qhead
+        #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + srvduration
+        # simlist$lastTime <- simlist$currtime +srvduration
+        # start job service    
+        # schedevnt(simlist$currtime+srvduration,2,simlist, job[3:4])
+        schedevnt(simlist$currtime + srvduration, 2, simlist, job[3:4])
+      }
+    } else {
+      # print("yell2")
+      jobnum <- simlist$jobnum + 1
+      simlist$jobnum <- jobnum
+      #simlist$stateDuration[simlist$state + 1, 1] = simlist$stateDuration[simlist$state + 1, 1] + timeofnextarrival
+      # simlist$lastTime <- simlist$currtime + timeofnextarrival
+      # schedevnt(simlist$lastTime, 1, simlist, job[3:4])
+      timeofnextarrival <- simlist$currtime + timeofnextarrival
+      schedevnt(timeofnextarrival, 1, simlist, c(timeofnextarrival,jobnum))
     }
   } 
 }
@@ -205,17 +271,23 @@ mm1react <- function(evnt,simlist) {
 # test; M/M/1 queue--exponential ("Markov" job interarrivals,
 # exponential service times, 1 server
 # main function
-# set the parameters of mm1 react
-# input event inter arrive mean time, repairer serves mean time, 
+# input total machine number, event inter arrive mean time (machine mean life time),
+# repairer serves mean time, 
 # running time limit for main loop
-mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
+machineRepair1b <- function(k, u, r, timelim,dbg=F) {
   simlist <- newsim(dbg) # new simlist
-  simlist$reactevent <- mm1react  # set reactevent in simlist
-  # et application-specific variables in simlist
-  simlist$arrvrate <- 1 / meaninterarrv # set arrive rate lamda, which is the reciprocol of the mean time
-  simlist$srvrate <- 1 / meansrv # set serve rate u
+  simlist$reactevent <- mm1react  # set called reactevent function in simlist
+  # set application-specific variables in simlist
+  simlist$k <- k
+  simlist$arrvrate <- 1 / r # set arrive rate lamda, which is the reciprocol of the mean time
+  simlist$srvrate <- 1 / u # set serving rate r
+  simlist$stateDuration <- rep(0, k + 1) # duration of each state
+  simlist$pi <- rep(0, k + 1)
+  simlist$state <- 0 # state indicator fot current system
+  simlist$lastTime <- 0
+  
   simlist$totjobs <- 0 # total jobs number
-  simlist$totwait <- 0.0 # total waits number
+  simlist$totwait <- 0.0 # total wait time
   simlist$queue <- NULL
   simlist$srvrbusy <- F
   # defining job numbers is good practice, always invaluable during
@@ -223,15 +295,29 @@ mm1 <- function(meaninterarrv,meansrv,timelim,dbg=F) {
   simlist$jobnum <- 0
   # event type codes: 1 for arrival, 2 for service completion;
   # set up first event, including info on this job's arrival time for
+  # PS: event == job
   # later use in finding mean wait until job done
-  timeto1starrival <- rexp(1,simlist$arrvrate) # generate random variable with exponential distribution cdf 
-  jobnum <- simlist$jobnum + 1
+  # generate a random variable (event/job's coming time&bulb's lifetime) with exponential distribution cdf as arrival time
+  timeto1starrival <- rexp(1, simlist$k * simlist$arrvrate) 
+  jobnum <- simlist$jobnum + 1 # set the job num 编号
   simlist$jobnum <- jobnum
+  # schedule a new event at time timeto1starrival (occurance time), type "arrival", insert it into simlist,
+  # jobnum and timeto1starrival as attached data
   schedevnt(timeto1starrival,1,simlist,c(timeto1starrival,jobnum))
+  # simlist$stateDuration = simlist$evnts(1)  #state 0
   mainloop(simlist,timelim)
   # should print out 1 / (srvrate - arrvrate)
-  cat("mean wait:  ")
-  print(simlist$totwait / simlist$totjobs)
+  cat("total job/event number:  ")
+  print(simlist$jobnum)
+  # cat("mean wait:  ")
+  # print(simlist$totwait / simlist$totjobs)
+  # what is the relationship between pi: propotion of time at that state
+  #cat("State Duration: ")
+  #print(simlist$stateDuration)
+    # cat("current time: ")
+    # print(simlist$currtime)
+    simlist$pi = simlist$stateDuration/simlist$lastTime
+    print(simlist$pi)
 }
 
-
+machineRepair1b(10,25,8,100000)
