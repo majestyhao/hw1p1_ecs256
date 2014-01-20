@@ -68,8 +68,7 @@ insevnt <- function(evnt,simlist) {
     return()
   }
   # otherwise, find insertion point
-  # inspt <- binsearch(simlist$evnts[,1],evnt[1])
-  inspt <- binsearchC(simlist$evnts[, 1], evnt[1])
+  inspt <- binsearch(simlist$evnts[,1],evnt[1])
   # now "insert," by reconstructing the matrix; we find what portion of
   # the current matrix should come before evnt and what portion should 
   # come after it, then string everything together
@@ -219,17 +218,18 @@ mm1react <- function(evnt,simlist) {
   } 
 }
 
-machinerepair <- function(k,u,r,timelim,dbg=F) {
-  Rcpp::sourceCpp('test.cpp')
+machinerepair <- function(k,u,r,C,timelim,dbg=F) {
   simlist <- newsim(dbg)
   simlist$reactevent <- mrreact  # defined below
   simlist$arrvrate <- 1 / r
   simlist$srvrate <- 1 / u
+  simlist$C <- C
   simlist$k <- k
   simlist$totjobs <- 0
   simlist$totwait <- 0.0
   simlist$nusers <- 0
-  simlist$statedur <- rep(0,k+1) #time spent in each state
+  simlist$statedur <- rep(0,k+1)
+  simlist$wakeuptime <- -1 #
   simlist$lasttime <- 0
   simlist$queue <- NULL
   simlist$srvrbusy <- F
@@ -239,43 +239,48 @@ machinerepair <- function(k,u,r,timelim,dbg=F) {
   # event type codes: 1 for arrival, 2 for service completion;
   # set up first event, including info on this job's arrival time for
   # later use in finding mean wait until job done
-  timeto1starrival <- rexp(1,(simlist$k * simlist$arrvrate))
+  timeto1starrival <- rexp(1,(simlist$arrvrate))
   jobnum <- simlist$jobnum + 1
   simlist$jobnum <- jobnum
   schedevnt(timeto1starrival,1,simlist,c(timeto1starrival,jobnum))
   mainloop(simlist,timelim)
   # should print out 1 / (srvrate - arrvrate)
-  cat("mean wait:  ")
-  print(simlist$totwait / simlist$totjobs)
+  #cat("mean wait:  ")
+  #print(simlist$totwait / simlist$totjobs)
   #cat("last event occurs at:  ")
   #print(simlist$lasttime)
   Pi <- simlist$statedur / simlist$lasttime
-  cat("Pi:  ")  
-  print(Pi)
-  cat("w:  ") 
-  print(sum((0:k)*Pi))
+  # cat("Pi:  ")  
+  # print(Pi)
+  # cat("w:  ") 
+  w = sum((0:k)*Pi)
+  # print(w)
+  return(Pi)
 }
 
 mrreact <- function(evnt,simlist) {
   etype <- evnt[2]
-  if (etype == 1) # job arrival
-  {  
+  if (etype == 1) 
+  {  # job arrival
     simlist$statedur[simlist$nusers+1] <- simlist$statedur[simlist$nusers+1] - simlist$lasttime + simlist$currtime
     simlist$lasttime <- simlist$currtime
+    if (evnt[3] == simlist$wakeuptime) # wake up arrival comes, invalidate wakeuptime
+    {
+      simlist$wakeuptime <- -1
+    }
     simlist$nusers <- simlist$nusers + 1
     simlist$queue <- appendtofcfsqueue(simlist$queue,evnt) # put the arrival into queue
-    
+    # schedule next arrival
     if (simlist$nusers == simlist$k)#no arrival, only served
     {      
-      # print("cao")
       tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
       job <- tmp$qhead
-      srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
+      srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))      
       schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])
     } 
     else # can be arrival, can be served
     {
-      arrduration <- rexp(1,((simlist$k - simlist$nusers) * simlist$arrvrate))
+      arrduration <- rexp(1,(simlist$arrvrate))
       srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
       if (arrduration < srvduration) # arrival first
       {
@@ -295,7 +300,6 @@ mrreact <- function(evnt,simlist) {
   } 
   else if (etype == 2) 
   {  # job completion
-    
     simlist$statedur[simlist$nusers+1] <- simlist$statedur[simlist$nusers+1] - simlist$lasttime + simlist$currtime
     simlist$lasttime <- simlist$currtime
     simlist$nusers <- simlist$nusers - 1
@@ -304,36 +308,82 @@ mrreact <- function(evnt,simlist) {
     tmp <- delfcfsqueuehead(simlist$queue) # kick out the first user in the queue
     job <- tmp$qhead
     simlist$queue <- tmp$newqueue
-    
-    if (simlist$nusers == 0) # only arrival
+    if (simlist$nusers == 0) # only arrival possible
     {
-      arrduration <- rexp(1,((simlist$k - simlist$nusers) * simlist$arrvrate))
-      jobnum <- simlist$jobnum + 1 
-      simlist$jobnum <- jobnum
-      timeofnextarrival <- simlist$currtime + arrduration
-      schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))      
-    }
-    else # can be arrival and departure
-    {
-      arrduration <- rexp(1,((simlist$k - simlist$nusers) * simlist$arrvrate))
-      srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
-      if (arrduration < srvduration) # arrival first
+      if (simlist$wakeuptime < 0) # otherwise no arrival, since the wakeup arrival has been put in the queue
       {
+        arrduration <- rexp(1,(simlist$arrvrate))
         jobnum <- simlist$jobnum + 1 
         simlist$jobnum <- jobnum
         timeofnextarrival <- simlist$currtime + arrduration
-        schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))
-      }
-      else # serve first
-      {
-        tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
-        job <- tmp$qhead
-        schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])
+        schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))          
       }
       
     }
+    else if (simlist$nusers == (simlist$k) - 1) #go from state k to state k-1, repairman wake up time is used
+    {
+      arrduration <- (rexp(1,(simlist$arrvrate)) + simlist$C)
+      jobnum <- simlist$jobnum + 1 
+      simlist$jobnum <- jobnum
+      timeofnextarrival <- simlist$currtime + arrduration
+      simlist$wakeuptime <- timeofnextarrival
+      schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))
+      
+      srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
+      if (srvduration < arrduration)
+      {
+        tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+        job <- tmp$qhead
+        schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])        
+      }
+      
+    }
+    else # can be arrival and departure
+    {
+      srvduration <- rexp(1,(simlist$nusers * simlist$srvrate))
+      if (simlist$wakeuptime > 0) #there is a call in the event queue that will come at wakeuptime
+      {
+        if (simlist$currtime + srvduration < simlist$wakeuptime) # departure early than the wakeup arrival
+        {
+          tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+          job <- tmp$qhead
+          schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])          
+        }       
+      }
+      else #no call in the event queue
+      {
+        arrduration <- rexp(1,(simlist$arrvrate))
+        if (arrduration < srvduration) # arrival first
+        {
+          jobnum <- simlist$jobnum + 1 
+          simlist$jobnum <- jobnum
+          timeofnextarrival <- simlist$currtime + arrduration
+          schedevnt(timeofnextarrival,1,simlist,c(timeofnextarrival,jobnum))
+        }
+        else # serve first
+        {
+          tmp <- delfcfsqueuehead(simlist$queue)# check the arrival time for the first user in the queue
+          job <- tmp$qhead
+          schedevnt(simlist$currtime+srvduration,2,simlist,job[3:4])
+        }
+        
+      }      
+    }
   } 
 }
-#machinerepair <- function(k,u,r,timelim,dbg=F)
-#at most k machines, u is the mean time for a machine to down, r is mean time to repair a machine
-machinerepair(10,25,8,100000)
+#machinerepair <- function(k,u,r,C,timelim,dbg=F) 
+#at most k machines, u is the mean time for a machine to down, r is mean time to repair a machine, C is the wake up time
+test <- function()
+{
+  Pis =matrix(rep(0, 11*11),nrow = 11, ncol = 11,byrow = TRUE)
+  for (i in (0:10))
+  {
+    Pis[i+1,] <- machinerepair(10,25,8,2^i,100000)  
+  }
+  return(Pis)
+}
+
+test()
+
+
+

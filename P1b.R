@@ -323,4 +323,4 @@ machineRepair1b <- function(k, u, r, timelim,dbg=F) {
   print(sum((0:k) * simlist$pi))
 }
 
-machineRepair1b(10,25,8,100000)
+machineRepair1b(2,25,8,1000000)
