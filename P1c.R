@@ -51,6 +51,8 @@
 #    mainloop(mysim,mysimtimelim)
 #    print results
 
+library("ggplot2")
+
 # create a simlist, which will be the return value, an R environment
 newsim <- function(dbg=F) {
   simlist <- new.env()
@@ -218,7 +220,7 @@ mm1react <- function(evnt,simlist) {
   } 
 }
 
-machinerepair <- function(k,u,r,C,timelim,dbg=F) {
+mr1c <- function(k,u,r,C,timelim,dbg=F) {
   simlist <- newsim(dbg)
   simlist$reactevent <- mrreact  # defined below
   simlist$arrvrate <- 1 / r
@@ -229,7 +231,7 @@ machinerepair <- function(k,u,r,C,timelim,dbg=F) {
   simlist$totwait <- 0.0
   simlist$nusers <- 0
   simlist$statedur <- rep(0,k+1)
-  simlist$wakeuptime <- -1 #
+  simlist$wakeuptime <- -1
   simlist$lasttime <- 0
   simlist$queue <- NULL
   simlist$srvrbusy <- F
@@ -255,10 +257,10 @@ machinerepair <- function(k,u,r,C,timelim,dbg=F) {
   # cat("w:  ") 
   w = sum((0:k)*Pi)
   # print(w)
-  return(Pi)
+  return(list("a" = Pi,"b" = w))
 }
 
-mrreact <- function(evnt,simlist) {
+mr1creact <- function(evnt,simlist) {
   etype <- evnt[2]
   if (etype == 1) 
   {  # job arrival
@@ -371,19 +373,34 @@ mrreact <- function(evnt,simlist) {
     }
   } 
 }
-#machinerepair <- function(k,u,r,C,timelim,dbg=F) 
+#mr1c <- function(k,u,r,C,timelim,dbg=F) 
 #at most k machines, u is the mean time for a machine to down, r is mean time to repair a machine, C is the wake up time
 test <- function()
 {
   Pis =matrix(rep(0, 11*11),nrow = 11, ncol = 11,byrow = TRUE)
+  W <- rep(0,11)
+  C <- rep(0, 11)
   for (i in (0:10))
   {
-    Pis[i+1,] <- machinerepair(10,25,8,2^i,100000)  
+    newlist <- machinerepair(10,25,8,2^i,100000)  
+    Pis[i+1,] <- newlist$a
+    W[i+1] <- newlist$b
+    C[i + 1] <- 2 ^ i
   }
-  return(Pis)
+  cat("Pis: ")
+  print(Pis)
+  cat("W: ")
+  print(W)
+  
+  # plot the output
+  myData <- data.frame(
+    w = W,
+    c = factor(C)
+  )
+  ggplot(data=myData, aes(c, w)) + geom_bar(aes(fill = c))
 }
 
-test()
 
+test()
 
 
